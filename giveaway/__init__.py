@@ -1,0 +1,1 @@
+"""NightLegion standalone giveaway package."""

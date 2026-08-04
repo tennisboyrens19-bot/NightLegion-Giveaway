@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.DS_Store
+# Local runtime data. On Render use DATA_DIR=/var/data for persistence.
+data/*.json
