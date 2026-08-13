@@ -38,6 +38,29 @@ def _member_name(guild: Optional[discord.Guild], user_id: str) -> str:
     return f"User {user_id}"
 
 
+def required_role_id(giveaway: dict) -> Optional[int]:
+    """Return the optional required role while keeping old giveaways open."""
+    role_id = giveaway.get("required_role_id")
+    if role_id in (None, ""):
+        return None
+    try:
+        return int(role_id)
+    except (TypeError, ValueError):
+        return None
+
+
+def member_has_required_role(member: discord.Member, giveaway: dict) -> bool:
+    role_id = required_role_id(giveaway)
+    if role_id is None:
+        return True
+    return any(role.id == role_id for role in member.roles)
+
+
+def required_rank_text(giveaway: dict) -> str:
+    role_id = required_role_id(giveaway)
+    return f"<@&{role_id}>" if role_id is not None else "None — everyone can enter."
+
+
 class Giveaways(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -117,14 +140,22 @@ class Giveaways(commands.Cog):
             end_time = int(giveaway["end_time"])
             embed.add_field(name="⏳ Ends", value=f"<t:{end_time}:R>\n<t:{end_time}:f>", inline=False)
             embed.add_field(name="👑 Hosted by", value=f"<@{giveaway['host_id']}>", inline=True)
-            embed.add_field(name="✅ Requirements", value="None — one Discord account, one entry.", inline=True)
+            requirements = required_rank_text(giveaway)
+            if required_role_id(giveaway) is None:
+                requirements = "None — one Discord account, one entry."
+            else:
+                requirements += "\nMust still have this rank when winners are drawn."
+            embed.add_field(name="✅ Requirements", value=requirements, inline=True)
         elif not cancelled:
             winners = [str(uid) for uid in giveaway.get("winner_ids", [])]
             winner_text = "\n".join(f"🏆 <@{uid}>" for uid in winners) if winners else "No valid entrants."
             embed.add_field(name="🎊 Winner(s)", value=winner_text, inline=False)
             paid = "✅ Marked paid" if giveaway.get("paid") else "⏳ Not marked paid yet"
             embed.add_field(name="💸 Payout", value=paid, inline=True)
-            embed.add_field(name="📊 Final entries", value=str(len(giveaway.get("entries", []))), inline=True)
+            final_entries = giveaway.get("eligible_entries_count", len(giveaway.get("entries", [])))
+            embed.add_field(name="📊 Final entries", value=str(final_entries), inline=True)
+            if required_role_id(giveaway) is not None:
+                embed.add_field(name="✅ Required rank", value=required_rank_text(giveaway), inline=True)
 
         if giveaway.get("has_banner"):
             embed.set_image(url=f"attachment://{FILENAME}")
@@ -215,6 +246,16 @@ class Giveaways(commands.Cog):
             if giveaway.get("ended") or now_ts() >= int(giveaway.get("end_time", 0)):
                 await interaction.response.send_message("This giveaway has ended.", ephemeral=True)
                 return
+
+            if required_role_id(giveaway) is not None:
+                if not isinstance(interaction.user, discord.Member) or not member_has_required_role(interaction.user, giveaway):
+                    rank_name = giveaway.get("required_role_name")
+                    rank_text = f"**{rank_name}**" if rank_name else required_rank_text(giveaway)
+                    await interaction.response.send_message(
+                        f"🔒 You need the {rank_text} rank to enter this giveaway.",
+                        ephemeral=True,
+                    )
+                    return
 
             uid = str(interaction.user.id)
             entries = [str(x) for x in giveaway.setdefault("entries", [])]
@@ -310,6 +351,7 @@ class Giveaways(commands.Cog):
         embed.add_field(name="🎟️ Entries", value=str(len(giveaway.get("entries", []))), inline=True)
         embed.add_field(name="🏆 Winners", value=str(giveaway.get("winners_count", 1)), inline=True)
         embed.add_field(name="👑 Host", value=f"<@{giveaway['host_id']}>", inline=True)
+        embed.add_field(name="✅ Required rank", value=required_rank_text(giveaway), inline=True)
         if not giveaway.get("ended"):
             embed.add_field(name="⏳ Ends", value=f"<t:{int(giveaway['end_time'])}:R>", inline=True)
         embed.add_field(name="How it works", value="Press **Enter Giveaway** once. The bot automatically locks the giveaway at the end time and randomly selects the winner(s).", inline=False)
@@ -320,18 +362,40 @@ class Giveaways(commands.Cog):
     # ------------------------------------------------------------------
     # Automatic end
     # ------------------------------------------------------------------
+    async def eligible_entries(self, giveaway: dict) -> list[str]:
+        entries = [str(x) for x in giveaway.get("entries", [])]
+        role_id = required_role_id(giveaway)
+        if role_id is None:
+            return entries
+
+        guild_id = giveaway.get("guild_id")
+        guild = self.bot.get_guild(int(guild_id)) if guild_id else None
+        if guild is None or guild.get_role(role_id) is None:
+            return []
+
+        eligible = []
+        for uid in entries:
+            try:
+                member = await guild.fetch_member(int(uid))
+            except (TypeError, ValueError, discord.HTTPException):
+                continue
+            if member_has_required_role(member, giveaway):
+                eligible.append(uid)
+        return eligible
+
     async def finish_giveaway(self, gid: str):
         async with self.data_lock:
             data = load_json(GIVEAWAYS_FILE, {})
             giveaway = data.get(gid)
             if not giveaway or giveaway.get("ended"):
                 return []
-            entries = [str(x) for x in giveaway.get("entries", [])]
+            entries = await self.eligible_entries(giveaway)
             count = min(int(giveaway.get("winners_count", 1)), len(entries))
             winners = random.SystemRandom().sample(entries, count) if count else []
             giveaway["ended"] = True
             giveaway["ended_at"] = now_ts()
             giveaway["winner_ids"] = winners
+            giveaway["eligible_entries_count"] = len(entries)
             save_json(GIVEAWAYS_FILE, data)
 
         await self.refresh_message(gid)
@@ -367,7 +431,12 @@ class Giveaways(commands.Cog):
     # Slash commands
     # ------------------------------------------------------------------
     @app_commands.command(name="giveaway_create", description="Create an automatic NightLegion giveaway.")
-    @app_commands.describe(prize="Dragon boots, tbow, 100m, 2x Bond, etc.", duration="30m, 2h, 7d, 2w", winners="Number of winners")
+    @app_commands.describe(
+        prize="Dragon boots, tbow, 100m, 2x Bond, etc.",
+        duration="30m, 2h, 7d, 2w",
+        winners="Number of winners",
+        required_rank="Optional Discord rank required to enter and win",
+    )
     @app_commands.checks.has_permissions(manage_guild=True)
     async def giveaway_create(
         self,
@@ -375,6 +444,7 @@ class Giveaways(commands.Cog):
         prize: str,
         duration: str,
         winners: app_commands.Range[int, 1, 25] = 1,
+        required_rank: Optional[discord.Role] = None,
     ):
         try:
             seconds = parse_duration(duration)
@@ -404,6 +474,8 @@ class Giveaways(commands.Cog):
             "reroll_history": [],
             "paid": False,
             "has_banner": False,
+            "required_role_id": required_rank.id if required_rank else None,
+            "required_role_name": required_rank.name if required_rank else None,
         }
 
         banner = await build_giveaway_card(meta)
@@ -449,9 +521,9 @@ class Giveaways(commands.Cog):
         if not giveaway.get("ended") or giveaway.get("cancelled"):
             await interaction.response.send_message("The giveaway must be ended before rerolling.", ephemeral=True)
             return
-        entries = [str(x) for x in giveaway.get("entries", [])]
+        entries = await self.eligible_entries(giveaway)
         if not entries:
-            await interaction.response.send_message("Nobody entered this giveaway.", ephemeral=True)
+            await interaction.response.send_message("Nobody currently eligible entered this giveaway.", ephemeral=True)
             return
         old = [str(x) for x in giveaway.get("winner_ids", [])]
         candidates = [uid for uid in entries if uid not in old] or entries
@@ -465,6 +537,7 @@ class Giveaways(commands.Cog):
                 "old_winner_ids": old, "new_winner_ids": selected,
             })
             current["winner_ids"] = selected
+            current["eligible_entries_count"] = len(entries)
             current["paid"] = False
             current.pop("paid_by", None)
             current.pop("paid_at", None)
