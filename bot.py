@@ -29,6 +29,7 @@ class GiveawayBot(commands.Bot):
 
     async def setup_hook(self):
         await self.load_extension("cogs.giveaways")
+        await self.load_extension("runelite_bridge")
 
         if TEST_GUILD_ID:
             # Keep testing commands scoped to the Giveaway Bot's test server.
