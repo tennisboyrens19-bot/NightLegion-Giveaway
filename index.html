@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#050506" />
+  <title>NightLegion</title>
+  <meta name="description" content="NightLegion — Old School RuneScape clan" />
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="styles-a.css" />
+  <link rel="stylesheet" href="styles-b.css" />
+</head>
+<body>
+  <div class="noise" aria-hidden="true"></div>
+  <div class="site-shell">
+    <header class="topbar" id="topbar">
+      <a class="brand" href="#/" aria-label="NightLegion home">
+        <img src="" data-nl-asset="brand" alt="NightLegion" />
+      </a>
+      <nav class="nav" id="mainNav" aria-label="Main navigation">
+        <a data-route="home" href="#/">Home</a>
+        <a data-route="events" href="#/events">Events</a>
+        <a data-route="leaderboard" href="#/leaderboard">Leaderboard</a>
+        <a data-route="clog" href="#/clog">Clog</a>
+        <a data-route="speedruns" href="#/speedruns">Speedruns</a>
+        <a data-route="ranks" href="#/ranks">Ranks</a>
+      </nav>
+      <button class="login-btn" id="loginButton" type="button">Login</button>
+      <button class="menu-btn" id="menuButton" type="button" aria-label="Open menu" aria-expanded="false">☰</button>
+    </header>
+
+    <main id="app" aria-live="polite"></main>
+
+    <footer class="footer">
+      <div class="footer-brand"><img src="" data-nl-asset="crest" alt="" /><span>NightLegion</span></div>
+      <div class="footer-links"><a href="#/ranks">Ranks</a><span>•</span><a href="https://discord.gg/AP2aK742SZ" target="_blank" rel="noreferrer">Discord</a></div>
+      <div>Old School RuneScape clan community</div>
+    </footer>
+  </div>
+
+  <div class="modal-backdrop hidden" id="loginModal" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+    <div class="modal-card login-card">
+      <button class="modal-close" id="closeModal" type="button" aria-label="Close">×</button>
+      <img src="" data-nl-asset="crest" alt="" class="modal-crest" />
+      <div class="eyebrow">MEMBER ACCESS</div>
+      <h2 id="loginTitle">Login to NightLegion</h2>
+      <p>Member access uses Discord. Connect the live OAuth URL in <code>app.js</code> when the clan web application credentials are ready.</p>
+      <button class="primary-wide" id="discordLogin" type="button">Continue with Discord</button>
+      <a class="plain-link" href="https://discord.gg/AP2aK742SZ" target="_blank" rel="noreferrer">Join the NightLegion Discord instead</a>
+    </div>
+  </div>
+
+  <div class="drawer-backdrop hidden" id="drawerBackdrop"></div>
+  <aside class="profile-drawer" id="profileDrawer" aria-hidden="true"></aside>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <script src="assets-a.js"></script>
+  <script src="assets-b.js"></script>
+  <script src="assets-c.js"></script>
+  <script src="app-a.js"></script>
+  <script src="app-b.js"></script>
+</body>
+</html>
